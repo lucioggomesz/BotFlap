@@ -20,10 +20,10 @@ descobrir os valores corretos observando a imagem real do jogo.
 # na sua tela. Pode usar uma ferramenta de captura (ex: Snipping Tool)
 # para descobrir as coordenadas.
 GAME_REGION = {
-    "top": 100,
-    "left": 100,
-    "width": 800,
-    "height": 600,
+    "top": 64,
+    "left": 231,
+    "width": 817,
+    "height": 606,
 }
 
 # ==================================================
