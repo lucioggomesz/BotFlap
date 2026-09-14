@@ -19,6 +19,13 @@ Cada execucao imprime uma faixa pronta para colar dentro da lista
 OBSTACLE_HSV_RANGES em config.py.
 
 Controles:
+    F         -> congela/descongela o frame atual (util para obstaculos
+                 que so ficam visiveis por pouco tempo na tela: aperte F
+                 assim que o obstaculo aparecer para "pausar" aquele
+                 instante e calibrar com calma)
+    Clique esquerdo na janela "original" -> amostra automaticamente a
+                 cor do pixel clicado e ja ajusta os sliders sozinho
+                 (mais rapido que arrastar manualmente)
     Q ou ESC  -> encerra e imprime os valores finais no terminal
                  (prontos para copiar em config.py)
 
@@ -28,8 +35,14 @@ O que a janela mostra:
     - "resultado": a imagem original com a mascara aplicada (so aparece
       o que esta dentro da faixa HSV escolhida)
 
-Ajuste os sliders ate que APENAS o objeto desejado (jogador ou
-obstaculo) fique branco na mascara, com o minimo de ruido possivel.
+Fluxo recomendado para objetos que aparecem rapido (ex: obstaculos):
+    1. Rode o script e deixe o jogo em execucao.
+    2. Assim que o obstaculo aparecer na tela, aperte F para congelar.
+    3. Clique em cima do obstaculo na janela "original".
+    4. Confira a "mask"/"resultado"; se precisar, ajuste os sliders
+       manualmente ainda com o frame congelado. Aperte F de novo para
+       descongelar e tentar outro instante, se necessario.
+    5. Aperte Q/ESC para finalizar e copiar os valores.
 """
 
 import argparse
@@ -40,6 +53,12 @@ import numpy as np
 import mss
 
 import config as cfg
+
+# Margem aplicada ao redor da cor do pixel clicado ao amostrar
+# automaticamente (clique do mouse). Valores maiores = faixa mais larga.
+CLICK_H_TOLERANCE = 10
+CLICK_S_TOLERANCE = 60
+CLICK_V_TOLERANCE = 60
 
 
 def nothing(_value):
@@ -181,20 +200,57 @@ def main():
 
     print(f"[CALIBRACAO] Alvo: {target}")
     print("[CALIBRACAO] Ajuste os sliders ate isolar o objeto desejado.")
+    print("[CALIBRACAO] F = congela/descongela o frame atual.")
+    print("[CALIBRACAO] Clique na janela 'original' para amostrar a cor "
+          "de um pixel automaticamente.")
     print("[CALIBRACAO] Pressione Q ou ESC para sair e ver os valores finais.")
 
     last_min, last_max = hsv_min, hsv_max
+    frozen_frame = None       # quando != None, o frame fica "pausado"
+    picked_point = None       # (x, y) do ultimo clique, a processar
+
+    def on_mouse(event, x, y, _flags, _param):
+        nonlocal picked_point
+        if event == cv2.EVENT_LBUTTONDOWN:
+            picked_point = (x, y)
+
+    cv2.setMouseCallback("original", on_mouse)
 
     try:
         while True:
-            try:
-                raw = np.array(sct.grab(cfg.GAME_REGION))
-            except Exception as exc:
-                print(f"[ERRO] Falha ao capturar a tela: {exc}")
-                break
+            if frozen_frame is None:
+                try:
+                    raw = np.array(sct.grab(cfg.GAME_REGION))
+                except Exception as exc:
+                    print(f"[ERRO] Falha ao capturar a tela: {exc}")
+                    break
+                frame = cv2.cvtColor(raw, cv2.COLOR_BGRA2BGR)
+            else:
+                frame = frozen_frame.copy()
 
-            frame = cv2.cvtColor(raw, cv2.COLOR_BGRA2BGR)
             hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+
+            if picked_point is not None:
+                px, py = picked_point
+                picked_point = None
+                if 0 <= py < hsv.shape[0] and 0 <= px < hsv.shape[1]:
+                    h, s, v = [int(c) for c in hsv[py, px]]
+                    h_min_c = max(0, h - CLICK_H_TOLERANCE)
+                    h_max_c = min(179, h + CLICK_H_TOLERANCE)
+                    s_min_c = max(0, s - CLICK_S_TOLERANCE)
+                    s_max_c = min(255, s + CLICK_S_TOLERANCE)
+                    v_min_c = max(0, v - CLICK_V_TOLERANCE)
+                    v_max_c = min(255, v + CLICK_V_TOLERANCE)
+                    cv2.setTrackbarPos("H MIN", window_name, h_min_c)
+                    cv2.setTrackbarPos("H MAX", window_name, h_max_c)
+                    cv2.setTrackbarPos("S MIN", window_name, s_min_c)
+                    cv2.setTrackbarPos("S MAX", window_name, s_max_c)
+                    cv2.setTrackbarPos("V MIN", window_name, v_min_c)
+                    cv2.setTrackbarPos("V MAX", window_name, v_max_c)
+                    print(
+                        f"[CALIBRACAO] Cor amostrada em ({px},{py}): "
+                        f"H={h} S={s} V={v} -> sliders ajustados"
+                    )
 
             h_min, h_max = read_trackbars(window_name)
             last_min, last_max = h_min, h_max
@@ -202,7 +258,9 @@ def main():
             mask = cv2.inRange(hsv, np.array(h_min), np.array(h_max))
             resultado = cv2.bitwise_and(frame, frame, mask=mask)
 
-            texto = f"MIN {h_min}  MAX {h_max}"
+            status = "CONGELADO (F solta)" if frozen_frame is not None \
+                else "AO VIVO (F congela)"
+            texto = f"{status}  MIN {h_min}  MAX {h_max}"
             cv2.putText(
                 frame, texto, (10, 20),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1, cv2.LINE_AA,
@@ -215,6 +273,13 @@ def main():
             key = cv2.waitKey(30) & 0xFF
             if key == ord("q") or key == 27:  # 27 = ESC
                 break
+            elif key == ord("f"):
+                if frozen_frame is None:
+                    frozen_frame = frame.copy()
+                    print("[CALIBRACAO] Frame congelado.")
+                else:
+                    frozen_frame = None
+                    print("[CALIBRACAO] Frame liberado (ao vivo).")
     finally:
         cv2.destroyAllWindows()
 

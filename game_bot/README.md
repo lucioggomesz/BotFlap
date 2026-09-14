@@ -62,9 +62,21 @@ Notas para Windows:
    Ajuste os sliders H/S/V até que **apenas** o personagem apareça
    branco na janela `mask`, com o mínimo de ruído possível. Pressione
    `Q` ou `ESC` para ver os valores finais impressos no terminal.
+
+   **Objetos que somem rápido da tela (ex: obstáculos passando):**
+   não precisa correr para ajustar os sliders a tempo. Use:
+   - **`F`**: congela o frame atual (pausa aquele instante da imagem).
+     Aperte assim que o obstáculo aparecer, ajuste com calma, aperte
+     `F` de novo para voltar ao modo ao vivo se quiser tentar outro
+     instante.
+   - **Clique com o botão esquerdo** na janela `original` em cima do
+     objeto desejado: o script lê a cor daquele pixel automaticamente
+     e já ajusta os 6 sliders sozinho (bem mais rápido que arrastar
+     manualmente). Depois é só fazer ajustes finos se precisar.
 6. Copie os valores impressos (`PLAYER_HSV_MIN` / `PLAYER_HSV_MAX`)
    para dentro de `config.py`.
-7. Repita o processo para os obstáculos. No jogo das palmeiras (tronco
+7. Repita o processo para os obstáculos (congele o frame com `F` assim
+   que eles aparecerem e clique neles). No jogo das palmeiras (tronco
    marrom + folhas verdes + carinhas amarelas), uma única faixa de cor
    normalmente não cobre o obstáculo inteiro, então calibre **cada
    parte separadamente**:
