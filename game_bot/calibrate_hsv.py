@@ -47,6 +47,76 @@ def nothing(_value):
     pass
 
 
+def _get_screen_size():
+    """Resolucao da tela (Windows). Usa um fallback se nao conseguir."""
+    try:
+        import ctypes
+        user32 = ctypes.windll.user32
+        return user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)
+    except Exception:
+        return 1920, 1080
+
+
+def layout_debug_windows(window_names, trackbar_window):
+    """
+    Posiciona as janelas de visualizacao (original/mask/resultado) e a
+    janela de sliders FORA da area coberta por GAME_REGION.
+
+    Isso evita o efeito de "espelho infinito": se uma janela de debug
+    fica desenhada por cima da propria area capturada, o proximo frame
+    acaba fotografando a janela anterior, criando reflexos repetidos.
+
+    A funcao calcula qual lado da tela (esquerda/direita/cima/baixo)
+    tem mais espaco livre ao redor de GAME_REGION e organiza as
+    janelas (redimensionadas se necessario) nesse espaco.
+    """
+    screen_w, screen_h = _get_screen_size()
+    region = cfg.GAME_REGION
+    g_left, g_top = region["left"], region["top"]
+    g_right = g_left + region["width"]
+    g_bottom = g_top + region["height"]
+
+    margins = {
+        "left": g_left,
+        "right": screen_w - g_right,
+        "top": g_top,
+        "bottom": screen_h - g_bottom,
+    }
+    side = max(margins, key=margins.get)
+    space = margins[side]
+
+    if side in ("left", "right"):
+        slider_x = 0 if side == "left" else g_right + 5
+        cv2.moveWindow(trackbar_window, slider_x, 0)
+    else:
+        slider_y = 0 if side == "top" else g_bottom + 5
+        cv2.moveWindow(trackbar_window, 0, slider_y)
+
+    if space < 150:
+        print(
+            "[CALIBRACAO][AVISO] Ha pouco espaco livre na tela fora da "
+            "area do jogo (GAME_REGION quase preenche a tela toda). Se "
+            "aparecer um efeito de reflexos/espelho repetido nas janelas "
+            "'original'/'mask'/'resultado', arraste-as manualmente (pelo "
+            "titulo) para fora da area ciano do jogo, ou deixe a janela "
+            "do Roblox menor/nao maximizada para sobrar mais espaco."
+        )
+
+    win_w = max(120, min(260, space - 20))
+    win_h = int(win_w * 0.75)
+
+    for i, name in enumerate(window_names):
+        cv2.resizeWindow(name, win_w, win_h)
+        if side == "left":
+            cv2.moveWindow(name, 5, i * (win_h + 40))
+        elif side == "right":
+            cv2.moveWindow(name, g_right + 10, i * (win_h + 40))
+        elif side == "top":
+            cv2.moveWindow(name, i * (win_w + 10), 5)
+        else:
+            cv2.moveWindow(name, i * (win_w + 10), g_bottom + 10)
+
+
 def create_trackbars(window_name, initial_min, initial_max):
     """Cria a janela de sliders H/S/V min e max com valores iniciais."""
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
@@ -92,20 +162,16 @@ def main():
 
     window_name = f"Calibrar HSV - {target}"
     create_trackbars(window_name, hsv_min, hsv_max)
-    cv2.moveWindow(window_name, 20, 20)
 
-    # As 3 janelas de visualizacao sao criadas e posicionadas lado a
-    # lado explicitamente. Sem isso, o OpenCV abre todas na mesma
-    # posicao da tela, uma exatamente por cima da outra -- parecendo
-    # que so existe uma janela (geralmente preta, achando que a
-    # captura falhou, quando na verdade as outras estao escondidas
-    # atras dela).
+    # As 3 janelas de visualizacao (e a de sliders) sao posicionadas
+    # automaticamente FORA da area coberta por GAME_REGION. Sem isso,
+    # elas podem abrir por cima da propria area do jogo capturada,
+    # criando um efeito de "espelho infinito" (cada frame fotografa a
+    # janela de debug anterior).
     cv2.namedWindow("original", cv2.WINDOW_NORMAL)
-    cv2.moveWindow("original", 420, 20)
     cv2.namedWindow("mask", cv2.WINDOW_NORMAL)
-    cv2.moveWindow("mask", 420, 420)
     cv2.namedWindow("resultado", cv2.WINDOW_NORMAL)
-    cv2.moveWindow("resultado", 900, 20)
+    layout_debug_windows(["original", "mask", "resultado"], window_name)
 
     try:
         sct = mss.mss()
