@@ -160,17 +160,34 @@ def detect_obstacles(frame):
     """
     Detecta obstaculos no frame usando filtro de cor HSV.
 
+    Se cfg.OBSTACLE_HSV_RANGES tiver faixas cadastradas (util quando o
+    obstaculo e composto por varias cores, ex: tronco + folhas +
+    carinhas), as mascaras de todas as faixas sao unidas antes de
+    procurar contornos. Caso contrario, usa a faixa unica
+    OBSTACLE_HSV_MIN/MAX.
+
     Retorna uma lista de dicionarios com x, y, w, h, cx, cy, ordenada
     por posicao horizontal (x) crescente.
     """
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-    mask = cv2.inRange(
-        hsv, np.array(cfg.OBSTACLE_HSV_MIN), np.array(cfg.OBSTACLE_HSV_MAX)
-    )
 
+    if cfg.OBSTACLE_HSV_RANGES:
+        mask = np.zeros(hsv.shape[:2], dtype=np.uint8)
+        for hsv_min, hsv_max in cfg.OBSTACLE_HSV_RANGES:
+            part_mask = cv2.inRange(hsv, np.array(hsv_min), np.array(hsv_max))
+            mask = cv2.bitwise_or(mask, part_mask)
+    else:
+        mask = cv2.inRange(
+            hsv, np.array(cfg.OBSTACLE_HSV_MIN), np.array(cfg.OBSTACLE_HSV_MAX)
+        )
+
+    # Remove ruido pequeno primeiro...
     kernel_close = np.ones(cfg.MORPH_CLOSE_KERNEL, np.uint8)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel_close)
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel_close)
+    # ...depois "cola" as partes do mesmo obstaculo (tronco + folhas +
+    # carinhas) que ficaram levemente separadas apos a uniao das mascaras.
+    kernel_merge = np.ones(cfg.OBSTACLE_MERGE_KERNEL, np.uint8)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel_merge)
 
     contours, _ = cv2.findContours(
         mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE

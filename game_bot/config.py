@@ -37,8 +37,32 @@ PLAYER_HSV_MAX = [35, 255, 255]
 # HSV DOS OBSTACULOS
 # ==================================================
 # Valores de EXEMPLO. Calibrar com calibrate_hsv.py --target obstacle
+# Usados como fallback caso OBSTACLE_HSV_RANGES esteja vazio.
 OBSTACLE_HSV_MIN = [5, 60, 40]
 OBSTACLE_HSV_MAX = [20, 255, 200]
+
+# No jogo das palmeiras (tronco marrom + folhas verdes + carinhas
+# amarelas), uma unica faixa HSV normalmente NAO cobre o obstaculo
+# inteiro. Preencha OBSTACLE_HSV_RANGES com uma faixa por "parte" do
+# obstaculo (tronco, folhas, carinhas...) calibrando cada uma com:
+#     python calibrate_hsv.py --target obstacle_tronco
+#     python calibrate_hsv.py --target obstacle_folhas
+#     python calibrate_hsv.py --target obstacle_carinha
+# As mascaras de todas as faixas listadas aqui sao unidas (OR) antes
+# de procurar os contornos. Se a lista ficar vazia, o codigo usa
+# OBSTACLE_HSV_MIN/MAX acima como faixa unica.
+OBSTACLE_HSV_RANGES = [
+    # ([h_min, s_min, v_min], [h_max, s_max, v_max]),
+    # ([10, 60, 40], [25, 255, 200]),   # exemplo: tronco marrom
+    # ([35, 60, 80], [85, 255, 255]),   # exemplo: folhas verdes
+    # ([20, 80, 150], [35, 255, 255]),  # exemplo: carinhas amarelas
+]
+
+# Kernel de fechamento usado para "colar" as partes do obstaculo
+# (tronco + folhas + carinhas) em um unico contorno, mesmo que fiquem
+# levemente separadas apos a uniao das mascaras. Costuma precisar ser
+# mais alto que largo, pois as partes ficam empilhadas verticalmente.
+OBSTACLE_MERGE_KERNEL = (9, 25)
 
 # ==================================================
 # FILTROS DE DETECCAO DO JOGADOR

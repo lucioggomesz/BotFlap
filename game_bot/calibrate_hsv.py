@@ -8,6 +8,16 @@ Uso:
     python calibrate_hsv.py --target player
     python calibrate_hsv.py --target obstacle
 
+No jogo das palmeiras (tronco + folhas + carinhas, cada parte com uma
+cor diferente), uma unica faixa HSV pode nao cobrir o obstaculo
+inteiro. Nesse caso, calibre cada parte separadamente usando qualquer
+rotulo que comece com "obstacle", por exemplo:
+    python calibrate_hsv.py --target obstacle_tronco
+    python calibrate_hsv.py --target obstacle_folhas
+    python calibrate_hsv.py --target obstacle_carinha
+Cada execucao imprime uma faixa pronta para colar dentro da lista
+OBSTACLE_HSV_RANGES em config.py.
+
 Controles:
     Q ou ESC  -> encerra e imprime os valores finais no terminal
                  (prontos para copiar em config.py)
@@ -63,18 +73,24 @@ def main():
     parser = argparse.ArgumentParser(description="Calibrador de HSV do bot")
     parser.add_argument(
         "--target",
-        choices=["player", "obstacle"],
         default="player",
-        help="Qual objeto calibrar: 'player' ou 'obstacle' (padrao: player)",
+        help=(
+            "Qual objeto calibrar. Use 'player' para o personagem, ou "
+            "'obstacle' (ou qualquer rotulo iniciado por 'obstacle_', "
+            "ex: 'obstacle_tronco') para uma parte de cor do obstaculo. "
+            "Padrao: player"
+        ),
     )
     args = parser.parse_args()
+    target = args.target.strip().lower()
+    is_obstacle = target.startswith("obstacle")
 
-    if args.target == "player":
-        hsv_min, hsv_max = cfg.PLAYER_HSV_MIN, cfg.PLAYER_HSV_MAX
-    else:
+    if is_obstacle:
         hsv_min, hsv_max = cfg.OBSTACLE_HSV_MIN, cfg.OBSTACLE_HSV_MAX
+    else:
+        hsv_min, hsv_max = cfg.PLAYER_HSV_MIN, cfg.PLAYER_HSV_MAX
 
-    window_name = f"Calibrar HSV - {args.target}"
+    window_name = f"Calibrar HSV - {target}"
     create_trackbars(window_name, hsv_min, hsv_max)
 
     try:
@@ -83,7 +99,7 @@ def main():
         print(f"[ERRO] Nao foi possivel iniciar a captura de tela: {exc}")
         sys.exit(1)
 
-    print(f"[CALIBRACAO] Alvo: {args.target}")
+    print(f"[CALIBRACAO] Alvo: {target}")
     print("[CALIBRACAO] Ajuste os sliders ate isolar o objeto desejado.")
     print("[CALIBRACAO] Pressione Q ou ESC para sair e ver os valores finais.")
 
@@ -123,13 +139,23 @@ def main():
         cv2.destroyAllWindows()
 
     print("\n[CALIBRACAO] Valores finais:")
-    if args.target == "player":
+    if target == "player":
         print(f"PLAYER_HSV_MIN = {list(last_min)}")
         print(f"PLAYER_HSV_MAX = {list(last_max)}")
-    else:
+        print("Copie essas duas linhas para dentro de config.py")
+    elif target == "obstacle":
         print(f"OBSTACLE_HSV_MIN = {list(last_min)}")
         print(f"OBSTACLE_HSV_MAX = {list(last_max)}")
-    print("Copie essas linhas para dentro de config.py")
+        print("Copie essas duas linhas para dentro de config.py")
+    else:
+        # Rotulo customizado (ex: obstacle_tronco, obstacle_folhas):
+        # imprime como uma entrada pronta para a lista OBSTACLE_HSV_RANGES.
+        print(f"# {target}")
+        print(f"({list(last_min)}, {list(last_max)}),")
+        print(
+            "Cole essa linha dentro da lista OBSTACLE_HSV_RANGES em "
+            "config.py (uma linha por parte do obstaculo calibrada)."
+        )
 
 
 if __name__ == "__main__":

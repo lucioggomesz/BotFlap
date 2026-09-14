@@ -64,11 +64,29 @@ Notas para Windows:
    `Q` ou `ESC` para ver os valores finais impressos no terminal.
 6. Copie os valores impressos (`PLAYER_HSV_MIN` / `PLAYER_HSV_MAX`)
    para dentro de `config.py`.
-7. Repita o processo para os obstáculos:
+7. Repita o processo para os obstáculos. No jogo das palmeiras (tronco
+   marrom + folhas verdes + carinhas amarelas), uma única faixa de cor
+   normalmente não cobre o obstáculo inteiro, então calibre **cada
+   parte separadamente**:
+   ```
+   python calibrate_hsv.py --target obstacle_tronco
+   python calibrate_hsv.py --target obstacle_folhas
+   python calibrate_hsv.py --target obstacle_carinha
+   ```
+   Cada execução imprime uma linha pronta (ex: `([10, 60, 40], [25,
+   255, 200]),`) para colar dentro da lista `OBSTACLE_HSV_RANGES` em
+   `config.py`. O bot une (OR) as máscaras de todas as faixas
+   cadastradas e depois "cola" as partes próximas com fechamento
+   morfológico (`OBSTACLE_MERGE_KERNEL`), tratando tronco + folhas +
+   carinha como um único obstáculo.
+
+   Se o seu obstáculo tiver só uma cor dominante e simples, pode usar
+   o modo antigo de faixa única:
    ```
    python calibrate_hsv.py --target obstacle
    ```
-   e copie `OBSTACLE_HSV_MIN` / `OBSTACLE_HSV_MAX` para `config.py`.
+   e copiar `OBSTACLE_HSV_MIN` / `OBSTACLE_HSV_MAX` para `config.py`,
+   deixando `OBSTACLE_HSV_RANGES = []` (vazio).
 8. Ajuste `GAME_REGION` em `config.py` para a posição exata (top,
    left, width, height) da janela/área do jogo na sua tela.
 9. Rode o bot:
