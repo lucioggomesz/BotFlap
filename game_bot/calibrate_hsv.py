@@ -92,6 +92,20 @@ def main():
 
     window_name = f"Calibrar HSV - {target}"
     create_trackbars(window_name, hsv_min, hsv_max)
+    cv2.moveWindow(window_name, 20, 20)
+
+    # As 3 janelas de visualizacao sao criadas e posicionadas lado a
+    # lado explicitamente. Sem isso, o OpenCV abre todas na mesma
+    # posicao da tela, uma exatamente por cima da outra -- parecendo
+    # que so existe uma janela (geralmente preta, achando que a
+    # captura falhou, quando na verdade as outras estao escondidas
+    # atras dela).
+    cv2.namedWindow("original", cv2.WINDOW_NORMAL)
+    cv2.moveWindow("original", 420, 20)
+    cv2.namedWindow("mask", cv2.WINDOW_NORMAL)
+    cv2.moveWindow("mask", 420, 420)
+    cv2.namedWindow("resultado", cv2.WINDOW_NORMAL)
+    cv2.moveWindow("resultado", 900, 20)
 
     try:
         sct = mss.mss()
