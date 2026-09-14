@@ -22,7 +22,12 @@ Controles:
     F         -> congela/descongela o frame atual (util para obstaculos
                  que so ficam visiveis por pouco tempo na tela: aperte F
                  assim que o obstaculo aparecer para "pausar" aquele
-                 instante e calibrar com calma)
+                 instante e calibrar com calma). O script guarda os
+                 ultimos frames capturados, entao mesmo que voce aperte
+                 F um pouco tarde/cedo, da pra ajustar com A/D.
+    A / D     -> (com o frame congelado) anda para tras / para frente
+                 no historico de frames recentes, para encontrar o
+                 instante exato em que o obstaculo aparece melhor.
     Clique esquerdo na janela "original" -> amostra automaticamente a
                  cor do pixel clicado e ja ajusta os sliders sozinho
                  (mais rapido que arrastar manualmente)
@@ -37,16 +42,20 @@ O que a janela mostra:
 
 Fluxo recomendado para objetos que aparecem rapido (ex: obstaculos):
     1. Rode o script e deixe o jogo em execucao.
-    2. Assim que o obstaculo aparecer na tela, aperte F para congelar.
-    3. Clique em cima do obstaculo na janela "original".
-    4. Confira a "mask"/"resultado"; se precisar, ajuste os sliders
-       manualmente ainda com o frame congelado. Aperte F de novo para
-       descongelar e tentar outro instante, se necessario.
-    5. Aperte Q/ESC para finalizar e copiar os valores.
+    2. Quando o obstaculo estiver por perto/aparecendo, aperte F para
+       congelar (nao precisa ser no instante exato).
+    3. Use A/D para andar entre os ultimos frames guardados ate achar
+       o melhor momento (obstaculo bem visivel, sem estar cortado).
+    4. Clique em cima do obstaculo na janela "original".
+    5. Confira a "mask"/"resultado"; ajuste os sliders manualmente se
+       precisar. Aperte F de novo para voltar ao modo ao vivo.
+    6. Aperte Q/ESC para finalizar e copiar os valores.
 """
 
 import argparse
 import sys
+import time
+from collections import deque
 
 import cv2
 import numpy as np
@@ -206,8 +215,22 @@ def main():
     print("[CALIBRACAO] Pressione Q ou ESC para sair e ver os valores finais.")
 
     last_min, last_max = hsv_min, hsv_max
-    frozen_frame = None       # quando != None, o frame fica "pausado"
+
+    # Buffer com os ultimos frames capturados. Ao congelar (F), o
+    # usuario pode navegar para tras/frente nesse historico com A/D,
+    # em vez de precisar acertar o instante exato em que apertou F --
+    # o que e dificil quando o obstaculo passa rapido pela tela.
+    frame_buffer = deque(maxlen=90)
+    frozen = False
+    buffer_index = 0
+
     picked_point = None       # (x, y) do ultimo clique, a processar
+
+    # Debounce da tecla F: o Windows pode gerar varios eventos de
+    # "tecla pressionada" numa unica apertada (auto-repeat), o que sem
+    # isso faria o freeze ligar e desligar quase instantaneamente.
+    last_freeze_toggle = 0.0
+    FREEZE_TOGGLE_COOLDOWN = 0.4  # segundos
 
     def on_mouse(event, x, y, _flags, _param):
         nonlocal picked_point
@@ -218,17 +241,23 @@ def main():
 
     try:
         while True:
-            if frozen_frame is None:
+            if not frozen:
                 try:
                     raw = np.array(sct.grab(cfg.GAME_REGION))
                 except Exception as exc:
                     print(f"[ERRO] Falha ao capturar a tela: {exc}")
                     break
                 frame = cv2.cvtColor(raw, cv2.COLOR_BGRA2BGR)
+                frame_buffer.append(frame)
+                display_frame = frame.copy()
             else:
-                frame = frozen_frame.copy()
+                if frame_buffer:
+                    buffer_index = max(0, min(buffer_index, len(frame_buffer) - 1))
+                    display_frame = frame_buffer[buffer_index].copy()
+                else:
+                    display_frame = np.zeros((10, 10, 3), dtype=np.uint8)
 
-            hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+            hsv = cv2.cvtColor(display_frame, cv2.COLOR_BGR2HSV)
 
             if picked_point is not None:
                 px, py = picked_point
@@ -256,30 +285,46 @@ def main():
             last_min, last_max = h_min, h_max
 
             mask = cv2.inRange(hsv, np.array(h_min), np.array(h_max))
-            resultado = cv2.bitwise_and(frame, frame, mask=mask)
+            resultado = cv2.bitwise_and(display_frame, display_frame, mask=mask)
 
-            status = "CONGELADO (F solta)" if frozen_frame is not None \
-                else "AO VIVO (F congela)"
+            if frozen:
+                status = (
+                    f"CONGELADO {buffer_index + 1}/{len(frame_buffer)} "
+                    "(A/D navega, F solta)"
+                )
+            else:
+                status = "AO VIVO (F congela)"
             texto = f"{status}  MIN {h_min}  MAX {h_max}"
             cv2.putText(
-                frame, texto, (10, 20),
+                display_frame, texto, (10, 20),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1, cv2.LINE_AA,
             )
 
-            cv2.imshow("original", frame)
+            cv2.imshow("original", display_frame)
             cv2.imshow("mask", mask)
             cv2.imshow("resultado", resultado)
 
             key = cv2.waitKey(30) & 0xFF
+            now = time.time()
+
             if key == ord("q") or key == 27:  # 27 = ESC
                 break
-            elif key == ord("f"):
-                if frozen_frame is None:
-                    frozen_frame = frame.copy()
-                    print("[CALIBRACAO] Frame congelado.")
+            elif key == ord("f") and (now - last_freeze_toggle) >= FREEZE_TOGGLE_COOLDOWN:
+                last_freeze_toggle = now
+                if not frozen:
+                    frozen = True
+                    buffer_index = len(frame_buffer) - 1 if frame_buffer else 0
+                    print(
+                        "[CALIBRACAO] Frame congelado. Use A (voltar) / "
+                        "D (avancar) para navegar pelos ultimos frames."
+                    )
                 else:
-                    frozen_frame = None
+                    frozen = False
                     print("[CALIBRACAO] Frame liberado (ao vivo).")
+            elif frozen and key == ord("a"):
+                buffer_index = max(0, buffer_index - 1)
+            elif frozen and key == ord("d"):
+                buffer_index = min(len(frame_buffer) - 1, buffer_index + 1)
     finally:
         cv2.destroyAllWindows()
 
